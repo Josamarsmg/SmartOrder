@@ -1,0 +1,7 @@
+{
+  "name": "Restaurante SmartOrder",
+  "description": "Aplicativo completo de gestão de restaurante com cardápio digital, sistema de pedidos em tempo real, KDS (Kitchen Display System) e painel administrativo.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
