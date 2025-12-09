@@ -22,6 +22,9 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ tableId, onExit, initi
   const [showNameModal, setShowNameModal] = useState(false);
   const [customerName, setCustomerName] = useState(initialCustomerName);
 
+  // Timer State
+  const [elapsedTime, setElapsedTime] = useState<string>('00:00');
+
   // Initial Data Load
   useEffect(() => {
     // Fetch Dynamic Menu
@@ -43,6 +46,39 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ tableId, onExit, initi
         setCustomerName(initialCustomerName);
     }
   }, [initialCustomerName]);
+
+  // Timer Logic
+  useEffect(() => {
+    let interval: any;
+    
+    if (activeTab === 'ORDERS' && myOrders.length > 0) {
+      const latestOrder = myOrders[0];
+      
+      // Only run timer if not served/closed
+      if (latestOrder.status !== OrderStatus.SERVED && latestOrder.status !== OrderStatus.CLOSED) {
+        const updateTimer = () => {
+          const now = Date.now();
+          const diff = now - latestOrder.timestamp;
+          
+          const minutes = Math.floor(diff / 60000);
+          const seconds = Math.floor((diff % 60000) / 1000);
+          
+          setElapsedTime(
+            `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+          );
+        };
+        
+        updateTimer(); // Run immediately
+        interval = setInterval(updateTimer, 1000);
+      } else {
+        setElapsedTime('Concluído');
+      }
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [activeTab, myOrders]);
 
   const filteredMenu = useMemo(() => {
     if (selectedCategory === 'ALL') return menuItems;
@@ -89,14 +125,13 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ tableId, onExit, initi
       await MockService.createOrder(tableId, cart, customerName);
       setCart([]);
       setShowNameModal(false);
-      alert('Pedido enviado com sucesso!');
       
-      // If used via onExit (Admin mode), maybe we want to go back or stay?
-      // For now, let's just clear the cart. If admin wants to leave, they click "Voltar".
-      if (!onExit) {
-         window.location.hash = '#/admin'; // Redirect for demo flow
-      } else {
-         onExit(); // Return to table map
+      // UX Improvement: Redirect immediately to Status/Orders tab
+      setActiveTab('ORDERS');
+      
+      // If used via onExit (Admin mode), clean up
+      if (onExit) {
+         onExit();
       }
     } catch (e) {
       alert('Erro ao enviar pedido.');
@@ -115,6 +150,22 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ tableId, onExit, initi
 
   const cartTotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   const ordersTotal = myOrders.reduce((acc, order) => acc + order.total, 0);
+
+  // Helper to get status colors and text description
+  const getStatusDetails = (status: OrderStatus) => {
+    switch (status) {
+      case OrderStatus.PENDING:
+        return { color: 'bg-yellow-500', text: 'Aguardando Confirmação', description: 'Seu pedido foi enviado para a cozinha.' };
+      case OrderStatus.PREPARING:
+        return { color: 'bg-blue-600', text: 'Em Preparo', description: 'O chef está preparando seus pratos.' };
+      case OrderStatus.READY:
+        return { color: 'bg-green-500', text: 'Pronto para Entrega', description: 'Seu pedido está a caminho da mesa!' };
+      case OrderStatus.SERVED:
+        return { color: 'bg-gray-500', text: 'Entregue', description: 'Bom apetite!' };
+      default:
+        return { color: 'bg-gray-500', text: 'Status Desconhecido', description: '' };
+    }
+  };
 
   // Styling Adjustments for Embedded Mode
   const containerClass = onExit 
@@ -285,48 +336,74 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ tableId, onExit, initi
           </div>
         )}
 
-        {/* STATUS VIEW (Optional in Admin Mode) */}
+        {/* TRACKING / ORDERS VIEW */}
         {activeTab === 'ORDERS' && (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-800">Meus Pedidos</h2>
             
-            <div className="bg-white p-4 rounded-xl shadow-sm mb-6 border-l-4 border-brand-500">
-               <p className="text-sm text-gray-500">Total Consumido (Parcial)</p>
-               <p className="text-3xl font-bold text-brand-600">R$ {ordersTotal.toFixed(2)}</p>
-               <p className="text-xs text-gray-400 mt-1">Peça a conta ao garçom para fechar.</p>
-            </div>
+            {/* HERO SECTION: LATEST ORDER STATUS */}
+            {myOrders.length > 0 && (
+              <div className="animate-fade-in">
+                <div className={`rounded-2xl p-6 text-white shadow-lg mb-6 flex flex-col items-center text-center ${getStatusDetails(myOrders[0].status).color}`}>
+                   <h2 className="text-lg font-medium opacity-90 mb-1">Status do Último Pedido</h2>
+                   <div className="text-3xl font-extrabold mb-2">{getStatusDetails(myOrders[0].status).text}</div>
+                   <p className="text-sm opacity-80 mb-6">{getStatusDetails(myOrders[0].status).description}</p>
+                   
+                   <div className="bg-black/20 rounded-xl px-6 py-3 w-full max-w-xs">
+                      <p className="text-xs uppercase tracking-widest opacity-70 mb-1">Tempo de Espera</p>
+                      <p className="text-4xl font-mono font-bold tracking-wider">{elapsedTime}</p>
+                   </div>
+                </div>
 
-            {myOrders.length === 0 ? (
-              <p className="text-center text-gray-500 py-10">Você ainda não fez nenhum pedido.</p>
-            ) : (
-              <div className="space-y-4">
-                {myOrders.map(order => (
-                  <div key={order.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                    <div className="flex justify-between items-start mb-3 border-b border-gray-100 pb-2">
-                      <div>
-                         <span className="text-xs text-gray-400">Pedido #{order.id.slice(-4)} • {order.customerName}</span>
-                         <p className="text-xs text-gray-400">{new Date(order.timestamp).toLocaleTimeString()}</p>
-                      </div>
-                      <Badge status={order.status} />
-                    </div>
-                    <ul className="space-y-1 mb-3">
-                      {order.items.map((item, idx) => (
-                        <li key={idx} className="text-sm flex justify-between">
-                          <span className="text-gray-800">
-                            <span className="font-bold">{item.quantity}x</span> {item.name}
-                            <span className="text-xs text-gray-500 ml-1">(R$ {item.price.toFixed(2)})</span>
-                          </span>
-                          <span className="text-gray-500">R$ {(item.price * item.quantity).toFixed(2)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="text-right font-bold text-gray-800 text-sm">
-                      Total: R$ {order.total.toFixed(2)}
-                    </div>
-                  </div>
-                ))}
+                {/* ADD MORE ITEMS ACTION */}
+                <button
+                  onClick={() => setActiveTab('MENU')}
+                  className="w-full bg-white border-2 border-brand-500 text-brand-600 py-4 rounded-xl font-bold text-lg shadow-md hover:bg-brand-50 transition-all flex items-center justify-center gap-2 mb-8"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  Adicionar Mais ao Pedido
+                </button>
               </div>
             )}
+
+            {/* ORDER HISTORY LIST */}
+            <div>
+                <h3 className="text-lg font-bold text-gray-800 mb-4 flex justify-between items-center">
+                   Histórico da Mesa
+                   <span className="text-sm font-normal text-gray-500">Total: R$ {ordersTotal.toFixed(2)}</span>
+                </h3>
+
+                {myOrders.length === 0 ? (
+                  <p className="text-center text-gray-500 py-10">Você ainda não fez nenhum pedido.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {myOrders.map(order => (
+                      <div key={order.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                        <div className="flex justify-between items-start mb-3 border-b border-gray-100 pb-2">
+                          <div>
+                            <span className="text-xs text-gray-400">Pedido #{order.id.slice(-4)} • {order.customerName}</span>
+                            <p className="text-xs text-gray-400">{new Date(order.timestamp).toLocaleTimeString()}</p>
+                          </div>
+                          <Badge status={order.status} />
+                        </div>
+                        <ul className="space-y-1 mb-3">
+                          {order.items.map((item, idx) => (
+                            <li key={idx} className="text-sm flex justify-between">
+                              <span className="text-gray-800">
+                                <span className="font-bold">{item.quantity}x</span> {item.name}
+                                <span className="text-xs text-gray-500 ml-1">(R$ {item.price.toFixed(2)})</span>
+                              </span>
+                              <span className="text-gray-500">R$ {(item.price * item.quantity).toFixed(2)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="text-right font-bold text-gray-800 text-sm">
+                          Total: R$ {order.total.toFixed(2)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+            </div>
           </div>
         )}
       </main>
