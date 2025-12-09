@@ -245,7 +245,8 @@ export const AdminApp: React.FC = () => {
                <p className="font-bold">Mesa: {selectedTable}</p>
             </div>
             <div>
-               <p>{new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+               <p>{new Date().toLocaleDateString()}</p>
+               <p>{new Date().toLocaleTimeString()}</p>
             </div>
           </div>
 
@@ -791,7 +792,7 @@ export const AdminApp: React.FC = () => {
                 <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     URL Base para os QR Codes
-                    <span className="font-normal text-gray-500 ml-2">(Edite se estiver testando em rede local)</span>
+                    <span className="font-normal text-gray-500 ml-2">(Para onde o cliente será direcionado?)</span>
                   </label>
                   <div className="flex flex-col md:flex-row gap-2">
                     <input 
@@ -799,7 +800,7 @@ export const AdminApp: React.FC = () => {
                       className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:ring-brand-500 focus:border-brand-500"
                       value={baseUrl}
                       onChange={(e) => setBaseUrl(e.target.value)}
-                      placeholder="Ex: http://192.168.0.15:3000"
+                      placeholder="Ex: http://192.168.0.15:5173"
                     />
                     <button 
                       onClick={testLink}
@@ -816,42 +817,41 @@ export const AdminApp: React.FC = () => {
                   </div>
                   
                   {/* Troubleshooting Guide */}
-                  <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded text-sm text-blue-900">
                     <h4 className="font-bold text-lg mb-2 flex items-center gap-2">
-                      ⚠️ O App não abre no celular? Leia isto!
+                      🌐 Como acessar de outro computador/celular?
                     </h4>
-                    <p className="mb-2">
-                      Se você consegue dar "ping" mas o site não carrega, o problema é que o 
-                      servidor de desenvolvimento bloqueia acessos externos por segurança padrão.
-                    </p>
                     
-                    <div className="bg-white p-3 rounded border border-yellow-300 mb-3">
-                      <p className="font-bold text-gray-900 mb-1">Solução 1: Liberar o Servidor</p>
-                      <p className="mb-1">Pare o terminal atual (Ctrl + C) e inicie novamente usando este comando:</p>
-                      <code className="block bg-gray-800 text-green-400 p-2 rounded font-mono text-xs">
-                        npm run dev -- --host
-                      </code>
-                      <p className="text-xs text-gray-500 mt-1">Ou se usar outro gerenciador: <span className="font-mono">npm start -- --host</span></p>
-                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                        <div className="bg-white p-3 rounded border border-blue-100">
+                            <p className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                <span className="bg-blue-100 text-blue-800 px-2 rounded-full text-xs">Opção 1</span>
+                                Rede Local (Rápido)
+                            </p>
+                            <p className="text-gray-600 mb-2 text-xs">Para testar no mesmo Wi-Fi.</p>
+                            <ol className="list-decimal list-inside text-xs space-y-1">
+                                <li>Pare o terminal atual (Ctrl + C).</li>
+                                <li>Rode o comando:</li>
+                            </ol>
+                            <code className="block bg-gray-800 text-green-400 p-2 rounded font-mono text-xs mt-1 mb-1">
+                                npm run dev -- --host
+                            </code>
+                            <p className="text-xs mt-1">O terminal mostrará um IP (ex: 192.168.x.x:5173). Use ele aqui em cima.</p>
+                        </div>
 
-                    <div className="bg-white p-3 rounded border border-yellow-300 mb-3">
-                      <p className="font-bold text-gray-900 mb-1">Solução 2: Firewall do Windows</p>
-                      <p>Verifique se o Windows não está bloqueando o <strong>Node.js</strong>. Tente desativar o firewall momentaneamente para testar.</p>
-                    </div>
-
-                    <div className="bg-white p-3 rounded border border-green-300">
-                      <p className="font-bold text-gray-900 mb-1">Solução 3 (Definitiva): Publicar na Internet</p>
-                      <p className="text-green-800 mb-2">
-                        Publique este código gratuitamente. Você não precisa recriar o app, basta enviar os arquivos.
-                      </p>
-                      <div className="flex gap-2">
-                        <a href="https://vercel.com/new" target="_blank" rel="noopener noreferrer" className="bg-black text-white px-3 py-1 rounded text-xs font-bold hover:bg-gray-800">
-                           Ir para Vercel
-                        </a>
-                        <a href="https://app.netlify.com/drop" target="_blank" rel="noopener noreferrer" className="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-teal-700">
-                           Ir para Netlify
-                        </a>
-                      </div>
+                        <div className="bg-white p-3 rounded border border-green-200">
+                            <p className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                <span className="bg-green-100 text-green-800 px-2 rounded-full text-xs">Opção 2</span>
+                                Publicar na Internet (Definitivo)
+                            </p>
+                            <p className="text-gray-600 mb-2 text-xs">Acesse de qualquer lugar (4G/5G/Casa).</p>
+                            <ol className="list-decimal list-inside text-xs space-y-1">
+                                <li>Rode o comando: <span className="font-mono bg-gray-100 px-1">npm run build</span></li>
+                                <li>Uma pasta <strong>dist</strong> será criada.</li>
+                                <li>Arraste essa pasta para o <a href="https://app.netlify.com/drop" target="_blank" className="text-blue-600 underline font-bold">Netlify Drop</a>.</li>
+                                <li>Cole o link gerado no campo de URL acima.</li>
+                            </ol>
+                        </div>
                     </div>
                   </div>
                 </div>
@@ -945,7 +945,7 @@ export const AdminApp: React.FC = () => {
                                 </div>
                                 <span className="text-sm font-medium">Taxa de Serviço (10%)</span>
                             </div>
-                            <span className={`font-bold ${includeServiceFee ? 'text-gray-800' : 'text-gray-300'}`}>
+                            <span className="font-bold">
                                 + R$ {currentServiceFee.toFixed(2)}
                             </span>
                         </div>
