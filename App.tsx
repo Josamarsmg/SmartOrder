@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ViewMode } from './types';
 import { TABLES } from './constants';
@@ -67,6 +68,8 @@ const App: React.FC = () => {
   };
 
   const logout = () => {
+    // Clear user session
+    localStorage.removeItem('smartOrder_user');
     window.location.hash = '#/login';
   };
 

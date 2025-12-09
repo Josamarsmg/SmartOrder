@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Order, OrderStatus } from '../types';
+import { Order, OrderStatus, User } from '../types';
 import { MockService } from '../services/mockService';
 import { TABLES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area } from 'recharts';
@@ -15,9 +15,46 @@ import autoTable from "jspdf-autotable";
 type AdminTab = 'DASHBOARD' | 'TABLES' | 'QRCODES' | 'KITCHEN' | 'MENU' | 'HISTORY' | 'USERS';
 
 export const AdminApp: React.FC = () => {
+  // --- Auth & Permission Logic ---
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('smartOrder_user');
+    if (storedUser) {
+      setCurrentUser(JSON.parse(storedUser));
+    }
+  }, []);
+
+  const getRolePermissions = () => {
+    const role = currentUser?.role || 'Admin'; // Default to Admin if not set (safe fallback for dev)
+    
+    // Configuração das permissões
+    switch (role) {
+      case 'Cozinha':
+        return ['KITCHEN'];
+      case 'Garçom':
+        return ['TABLES', 'KITCHEN'];
+      case 'Admin':
+      default:
+        return ['DASHBOARD', 'TABLES', 'QRCODES', 'KITCHEN', 'MENU', 'HISTORY', 'USERS'];
+    }
+  };
+
+  const allowedTabs = getRolePermissions();
+  
+  // Initialize active tab based on role permissions
+  // Se o usuário não tem permissão para DASHBOARD (ex: Cozinha), ele começa na primeira aba permitida
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    const role = JSON.parse(localStorage.getItem('smartOrder_user') || '{}').role || 'Admin';
+    if (role === 'Cozinha') return 'KITCHEN';
+    if (role === 'Garçom') return 'TABLES';
+    return 'DASHBOARD';
+  });
+
+  // --- End Auth Logic ---
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<AdminTab>('DASHBOARD');
   
   // New state to toggle between "Viewing Table" and "Placing Order"
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
@@ -326,96 +363,119 @@ export const AdminApp: React.FC = () => {
       <aside className="w-64 bg-gray-900 text-white flex flex-col no-print shrink-0 h-screen sticky top-0">
         <div className="p-6 border-b border-gray-800">
           <h1 className="text-2xl font-bold text-brand-500">SmartOrder</h1>
-          <p className="text-xs text-gray-500">Admin Panel v1.2 (Live)</p>
+          <div className="flex flex-col mt-1">
+            <span className="text-xs text-gray-500">v1.2 (Live Tracking)</span>
+            <span className="text-xs font-bold text-white mt-1 bg-gray-800 px-2 py-0.5 rounded w-fit">
+              {currentUser?.name || 'Carregando...'}
+            </span>
+            <span className="text-[10px] text-gray-400 mt-0.5 uppercase tracking-wider">
+              {currentUser?.role || 'Acesso Restrito'}
+            </span>
+          </div>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-2">
-          {/* Internal Tabs */}
-          <button
-            onClick={() => { setActiveTab('DASHBOARD'); setSelectedTable(null); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'DASHBOARD' 
-                ? 'bg-brand-600 text-white shadow-lg' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
-            <span className="font-medium">Dashboard</span>
-          </button>
+          {/* Internal Tabs - Render conditionally based on role permissions */}
+          
+          {allowedTabs.includes('DASHBOARD') && (
+            <button
+              onClick={() => { setActiveTab('DASHBOARD'); setSelectedTable(null); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                activeTab === 'DASHBOARD' 
+                  ? 'bg-brand-600 text-white shadow-lg' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+              <span className="font-medium">Dashboard</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveTab('TABLES')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'TABLES' 
-                ? 'bg-brand-600 text-white shadow-lg' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-            <span className="font-medium">Mesas & Pedidos</span>
-          </button>
+          {allowedTabs.includes('TABLES') && (
+            <button
+              onClick={() => setActiveTab('TABLES')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                activeTab === 'TABLES' 
+                  ? 'bg-brand-600 text-white shadow-lg' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+              <span className="font-medium">Mesas & Pedidos</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => { setActiveTab('QRCODES'); setSelectedTable(null); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'QRCODES' 
-                ? 'bg-brand-600 text-white shadow-lg' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4h2v-4zM6 8v4M6 16v4m14-8v4m-2-4v4m0 0h2m-2 0h-2m-2 0v4m0-4h-2m2 4h-2m-6-16h4M4 8h4m6 4v4m-4-4v4" /></svg>
-            <span className="font-medium">QR Codes</span>
-          </button>
+          {allowedTabs.includes('QRCODES') && (
+            <button
+              onClick={() => { setActiveTab('QRCODES'); setSelectedTable(null); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                activeTab === 'QRCODES' 
+                  ? 'bg-brand-600 text-white shadow-lg' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4h2v-4zM6 8v4M6 16v4m14-8v4m-2-4v4m0 0h2m-2 0h-2m-2 0v4m0-4h-2m2 4h-2m-6-16h4M4 8h4m6 4v4m-4-4v4" /></svg>
+              <span className="font-medium">QR Codes</span>
+            </button>
+          )}
 
           <div className="pt-2"></div>
 
-          <button
-            onClick={() => { setActiveTab('KITCHEN'); setSelectedTable(null); }}
-             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'KITCHEN' 
-                ? 'bg-brand-600 text-white shadow-lg' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-            }`}
-          >
-             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
-             <span className="font-medium">Cozinha (KDS)</span>
-          </button>
+          {allowedTabs.includes('KITCHEN') && (
+            <button
+              onClick={() => { setActiveTab('KITCHEN'); setSelectedTable(null); }}
+               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                activeTab === 'KITCHEN' 
+                  ? 'bg-brand-600 text-white shadow-lg' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+               <span className="font-medium">Cozinha (KDS)</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => { setActiveTab('MENU'); setSelectedTable(null); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'MENU' 
-                ? 'bg-brand-600 text-white shadow-lg' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
-            <span className="font-medium">Editar Cardápio</span>
-          </button>
+          {allowedTabs.includes('MENU') && (
+            <button
+              onClick={() => { setActiveTab('MENU'); setSelectedTable(null); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                activeTab === 'MENU' 
+                  ? 'bg-brand-600 text-white shadow-lg' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+              <span className="font-medium">Editar Cardápio</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => { setActiveTab('HISTORY'); setSelectedTable(null); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'HISTORY' 
-                ? 'bg-brand-600 text-white shadow-lg' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            <span className="font-medium">Balanço</span>
-          </button>
+          {allowedTabs.includes('HISTORY') && (
+            <button
+              onClick={() => { setActiveTab('HISTORY'); setSelectedTable(null); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                activeTab === 'HISTORY' 
+                  ? 'bg-brand-600 text-white shadow-lg' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              <span className="font-medium">Balanço</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => { setActiveTab('USERS'); setSelectedTable(null); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'USERS' 
-                ? 'bg-brand-600 text-white shadow-lg' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-            <span className="font-medium">Usuários</span>
-          </button>
+          {allowedTabs.includes('USERS') && (
+            <button
+              onClick={() => { setActiveTab('USERS'); setSelectedTable(null); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                activeTab === 'USERS' 
+                  ? 'bg-brand-600 text-white shadow-lg' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+              <span className="font-medium">Usuários</span>
+            </button>
+          )}
         </nav>
 
         <div className="p-4 border-t border-gray-800">
@@ -434,7 +494,7 @@ export const AdminApp: React.FC = () => {
         <main className={`flex-1 overflow-x-hidden overflow-y-auto ${activeTab === 'KITCHEN' ? 'bg-gray-900 p-4' : 'bg-gray-100 p-6'}`}>
           
           {/* DASHBOARD TAB (Statistics Only) */}
-          {activeTab === 'DASHBOARD' && (
+          {allowedTabs.includes('DASHBOARD') && activeTab === 'DASHBOARD' && (
             <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-10">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Visão Geral (Dashboard)</h2>
               
@@ -566,7 +626,7 @@ export const AdminApp: React.FC = () => {
           )}
 
           {/* TABLES TAB (Map & POS) */}
-          {activeTab === 'TABLES' && (
+          {allowedTabs.includes('TABLES') && activeTab === 'TABLES' && (
             <div className="space-y-6 animate-fade-in max-w-7xl mx-auto h-[calc(100vh-80px)]">
                <div className="flex justify-between items-center">
                   <h2 className="text-2xl font-bold text-gray-800">Gestão de Mesas</h2>
@@ -765,7 +825,7 @@ export const AdminApp: React.FC = () => {
           )}
 
           {/* OTHER TABS */}
-          {activeTab === 'QRCODES' && (
+          {allowedTabs.includes('QRCODES') && activeTab === 'QRCODES' && (
             <div className="animate-fade-in space-y-6 max-w-7xl mx-auto">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Configuração de QR Codes</h2>
               
@@ -888,25 +948,25 @@ export const AdminApp: React.FC = () => {
             </div>
           )}
           
-          {activeTab === 'KITCHEN' && (
+          {allowedTabs.includes('KITCHEN') && activeTab === 'KITCHEN' && (
              <div className="animate-fade-in">
                <KitchenApp embedded={true} />
              </div>
           )}
 
-          {activeTab === 'MENU' && (
+          {allowedTabs.includes('MENU') && activeTab === 'MENU' && (
              <div className="animate-fade-in">
                <MenuEditorApp embedded={true} />
              </div>
           )}
 
-          {activeTab === 'HISTORY' && (
+          {allowedTabs.includes('HISTORY') && activeTab === 'HISTORY' && (
              <div className="animate-fade-in">
                <HistoryApp embedded={true} />
              </div>
           )}
 
-          {activeTab === 'USERS' && (
+          {allowedTabs.includes('USERS') && activeTab === 'USERS' && (
              <div className="animate-fade-in">
                <UserManagementApp embedded={true} />
              </div>

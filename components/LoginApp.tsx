@@ -24,6 +24,9 @@ export const LoginApp: React.FC = () => {
     try {
       const user = await MockService.login(email, password);
       if (user) {
+        // Salva o usuário na sessão para controle de permissão
+        localStorage.setItem('smartOrder_user', JSON.stringify(user));
+        
         // Success
         window.location.hash = '#/landing';
       } else {
