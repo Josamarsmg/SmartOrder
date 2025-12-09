@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { Category, MenuItem, CartItem, Order, OrderStatus } from '../types';
 import { MockService } from '../services/mockService';
@@ -6,9 +7,10 @@ import { Badge } from './ui/Badge';
 interface CustomerAppProps {
   tableId: string;
   onExit?: () => void; // Optional callback for when used inside Admin
+  initialCustomerName?: string; // Novo: Permite pré-preencher o nome
 }
 
-export const CustomerApp: React.FC<CustomerAppProps> = ({ tableId, onExit }) => {
+export const CustomerApp: React.FC<CustomerAppProps> = ({ tableId, onExit, initialCustomerName = '' }) => {
   const [activeTab, setActiveTab] = useState<'MENU' | 'CART' | 'ORDERS'>('MENU');
   const [selectedCategory, setSelectedCategory] = useState<Category | 'ALL'>('ALL');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -18,7 +20,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ tableId, onExit }) => 
   
   // State for Name Modal
   const [showNameModal, setShowNameModal] = useState(false);
-  const [customerName, setCustomerName] = useState('');
+  const [customerName, setCustomerName] = useState(initialCustomerName);
 
   // Initial Data Load
   useEffect(() => {
@@ -34,6 +36,13 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ tableId, onExit }) => 
     });
     return () => unsubscribe();
   }, [tableId]);
+
+  // Atualiza o nome se a prop mudar (ex: Admin troca de cliente alvo)
+  useEffect(() => {
+    if (initialCustomerName) {
+        setCustomerName(initialCustomerName);
+    }
+  }, [initialCustomerName]);
 
   const filteredMenu = useMemo(() => {
     if (selectedCategory === 'ALL') return menuItems;
@@ -119,7 +128,14 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({ tableId, onExit }) => 
         <div className={`${onExit ? 'w-full px-2' : 'max-w-3xl mx-auto px-4 py-3'} flex justify-between items-center`}>
           <div>
             {!onExit && <h1 className="text-xl font-bold text-brand-600">SmartOrder</h1>}
-            {onExit && <h2 className="text-lg font-bold text-gray-800">Novo Pedido</h2>}
+            {onExit && (
+                <div>
+                    <h2 className="text-lg font-bold text-gray-800">Novo Pedido</h2>
+                    {initialCustomerName && (
+                        <p className="text-xs text-brand-600 font-medium">Cliente: {initialCustomerName}</p>
+                    )}
+                </div>
+            )}
           </div>
           
           <div className="flex items-center gap-3">

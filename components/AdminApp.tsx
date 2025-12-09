@@ -21,6 +21,9 @@ export const AdminApp: React.FC = () => {
   
   // New state to toggle between "Viewing Table" and "Placing Order"
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  
+  // New state to store target customer name for quick add
+  const [targetCustomerName, setTargetCustomerName] = useState<string>('');
 
   // State for Custom URL (fixes localhost testing issues)
   const [baseUrl, setBaseUrl] = useState(window.location.origin + window.location.pathname);
@@ -626,6 +629,7 @@ export const AdminApp: React.FC = () => {
                            <CustomerApp 
                               tableId={selectedTable} 
                               onExit={() => setIsPlacingOrder(false)} 
+                              initialCustomerName={targetCustomerName} // Passa o nome do cliente selecionado
                            />
                         </div>
                       ) : (
@@ -649,7 +653,10 @@ export const AdminApp: React.FC = () => {
                           {/* Action Buttons */}
                           <div className="flex flex-col gap-3 mb-6">
                                 <button 
-                                  onClick={() => setIsPlacingOrder(true)}
+                                  onClick={() => {
+                                      setTargetCustomerName(''); // Novo pedido genérico limpa o nome
+                                      setIsPlacingOrder(true);
+                                  }}
                                   className="flex-1 bg-brand-600 hover:bg-brand-700 text-white py-3 px-4 rounded-xl font-bold text-lg shadow-md transition-transform hover:scale-[1.02]"
                                 >
                                   + Novo Pedido
@@ -684,10 +691,25 @@ export const AdminApp: React.FC = () => {
                                     return (
                                         <div key={name} className="bg-white border border-gray-200 rounded-lg p-4 mb-3 shadow-sm">
                                             <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-2">
-                                                <h4 className="font-bold text-lg text-gray-800 flex items-center gap-2">
-                                                    <span className="bg-brand-100 text-brand-800 text-xs px-2 py-1 rounded-full">👤</span>
-                                                    {name}
-                                                </h4>
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                                                        <span className="bg-brand-100 text-brand-800 text-xs px-2 py-1 rounded-full">👤</span>
+                                                        {name}
+                                                    </h4>
+                                                    
+                                                    {/* Botão de Adicionar Rápido */}
+                                                    <button 
+                                                        onClick={() => {
+                                                            setTargetCustomerName(name);
+                                                            setIsPlacingOrder(true);
+                                                        }}
+                                                        className="ml-2 text-brand-600 hover:bg-brand-50 p-1 rounded transition-colors"
+                                                        title="Adicionar itens para este cliente"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                                    </button>
+                                                </div>
+
                                                 <div className="flex gap-1">
                                                   {personOrders.some(o => o.status === OrderStatus.PENDING) && (
                                                      <span className="w-2 h-2 rounded-full bg-yellow-500" title="Pendente"></span>
