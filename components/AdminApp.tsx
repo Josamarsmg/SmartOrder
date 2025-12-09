@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { Order, OrderStatus } from '../types';
 import { MockService } from '../services/mockService';
@@ -46,7 +47,8 @@ export const AdminApp: React.FC = () => {
   // Calculate Best Selling Item
   type ItemStats = { name: string; category: string; quantity: number };
   const itemSalesMap = orders.reduce((acc, order) => {
-    order.items.forEach(item => {
+    // FIX: Add optional chaining and default empty array to prevent crash on undefined items
+    (order.items || []).forEach(item => {
       if (!acc[item.name]) {
         acc[item.name] = { name: item.name, category: item.category, quantity: 0 };
       }
@@ -59,7 +61,8 @@ export const AdminApp: React.FC = () => {
 
   // Chart Data: Category Sales
   const categoryDataMap = orders.reduce((acc, order) => {
-    order.items.forEach(item => {
+    // FIX: Add optional chaining and default empty array
+    (order.items || []).forEach(item => {
       acc[item.category] = (acc[item.category] || 0) + (item.price * item.quantity);
     });
     return acc;
@@ -154,7 +157,8 @@ export const AdminApp: React.FC = () => {
 
     // Iterate over customers to create grouped sections in PDF
     Object.entries(groupedOrders).forEach(([customerName, customerOrders]) => {
-        const bodyData = customerOrders.flatMap(o => o.items.map(item => [
+        // FIX: Ensure items exist before mapping
+        const bodyData = customerOrders.flatMap(o => (o.items || []).map(item => [
             `${item.quantity}x ${item.name}`,
             `R$ ${(item.price * item.quantity).toFixed(2)}`
         ]));
@@ -222,6 +226,9 @@ export const AdminApp: React.FC = () => {
   const currentServiceFee = includeServiceFee ? currentTableSubtotal * 0.10 : 0;
   const currentFinalTotal = currentTableSubtotal + currentServiceFee;
 
+  // Prepare grouped orders for display in the panel
+  const groupedOrdersForPanel = selectedTable ? getOrdersByPerson(selectedTable) : {};
+
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900 font-sans flex">
       {/* Print Only Section for Bill (Only rendered if Table is selected) */}
@@ -256,7 +263,7 @@ export const AdminApp: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {customerOrders.flatMap(o => o.items).map((item, i) => (
+                    {customerOrders.flatMap(o => (o.items || [])).map((item, i) => (
                       <tr key={i} className="border-b border-gray-50">
                         <td className="py-1">{item.quantity}</td>
                         <td className="py-1">
@@ -661,61 +668,68 @@ export const AdminApp: React.FC = () => {
                                 </button>
                           </div>
 
-                          {/* Orders List */}
+                          {/* Orders List Grouped by Person */}
                           <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar mb-4">
-                            <h3 className="font-bold text-gray-700 mb-4 text-sm uppercase tracking-wide">Pedidos em Aberto</h3>
+                            <h3 className="font-bold text-gray-700 mb-4 text-sm uppercase tracking-wide">Detalhamento por Cliente</h3>
                             
-                            {orders.filter(o => o.tableId === selectedTable && o.status !== OrderStatus.CLOSED).length === 0 ? (
+                            {Object.keys(groupedOrdersForPanel).length === 0 ? (
                               <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-lg">
                                 <p className="text-gray-400">Nenhuma comanda aberta nesta mesa.</p>
                               </div>
                             ) : (
-                              <div className="space-y-4">
-                                {orders
-                                    .filter(o => o.tableId === selectedTable && o.status !== OrderStatus.CLOSED)
-                                    .sort((a, b) => b.timestamp - a.timestamp)
-                                    .map(order => (
-                                    <div key={order.id} className="bg-gray-50 p-3 rounded-lg border border-gray-100 text-sm hover:shadow-sm transition-shadow">
-                                        <div className="flex flex-col gap-2">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <p className="font-bold text-gray-800 truncate">{order.customerName || 'Cliente'}</p>
-                                                    <p className="text-xs text-gray-400">{new Date(order.timestamp).toLocaleTimeString()}</p>
-                                                </div>
-                                                <div className="font-bold text-gray-800">
-                                                  R$ {order.total.toFixed(2)}
+                                Object.entries(groupedOrdersForPanel).map(([name, personOrders]) => {
+                                    // Calculate total for this person
+                                    const personTotal = personOrders.reduce((acc, o) => acc + o.total, 0);
+                                    
+                                    return (
+                                        <div key={name} className="bg-white border border-gray-200 rounded-lg p-4 mb-3 shadow-sm">
+                                            <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-2">
+                                                <h4 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                                                    <span className="bg-brand-100 text-brand-800 text-xs px-2 py-1 rounded-full">👤</span>
+                                                    {name}
+                                                </h4>
+                                                <div className="flex gap-1">
+                                                  {personOrders.some(o => o.status === OrderStatus.PENDING) && (
+                                                     <span className="w-2 h-2 rounded-full bg-yellow-500" title="Pendente"></span>
+                                                  )}
+                                                  {personOrders.some(o => o.status === OrderStatus.PREPARING) && (
+                                                     <span className="w-2 h-2 rounded-full bg-blue-500" title="Em Preparo"></span>
+                                                  )}
+                                                  {personOrders.some(o => o.status === OrderStatus.READY) && (
+                                                     <span className="w-2 h-2 rounded-full bg-green-500" title="Pronto"></span>
+                                                  )}
                                                 </div>
                                             </div>
-                                            
-                                            <span className={`px-2 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider text-center w-full
-                                                  ${order.status === OrderStatus.PENDING ? 'bg-yellow-100 text-yellow-700' : ''}
-                                                  ${order.status === OrderStatus.PREPARING ? 'bg-blue-100 text-blue-700' : ''}
-                                                  ${order.status === OrderStatus.READY ? 'bg-green-100 text-green-700' : ''}
-                                                  ${order.status === OrderStatus.SERVED ? 'bg-gray-200 text-gray-600' : ''}
-                                              `}>
-                                                  {order.status}
-                                            </span>
 
-                                            <div>
-                                                <ul className="space-y-1 text-xs text-gray-600">
-                                                    {order.items.map((item, idx) => (
-                                                        <li key={idx} className="truncate">
-                                                            • {item.quantity}x {item.name} <span className="text-gray-400">({item.price.toFixed(2)})</span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
+                                            <div className="space-y-2">
+                                                {personOrders.flatMap(o => o.items || []).map((item, idx) => (
+                                                    <div key={idx} className="flex justify-between text-sm">
+                                                        <span className="text-gray-600 truncate max-w-[70%]">
+                                                            <span className="font-bold">{item.quantity}x</span> {item.name}
+                                                        </span>
+                                                        <span className="text-gray-900 font-medium">
+                                                            R$ {(item.price * item.quantity).toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            <div className="mt-3 pt-2 border-t border-dashed border-gray-300 flex justify-between items-center">
+                                                <span className="text-xs text-gray-500">Subtotal ({name})</span>
+                                                <span className="font-bold text-gray-900 text-lg">
+                                                    R$ {personTotal.toFixed(2)}
+                                                </span>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                              </div>
+                                    );
+                                })
                             )}
                           </div>
 
                           {/* Footer Total */}
                           <div className="bg-gray-50 -m-6 mt-0 p-6 border-t border-gray-200">
                             <div className="flex justify-between items-end">
-                                <span className="text-xl font-bold text-gray-800">Total</span>
+                                <span className="text-xl font-bold text-gray-800">Total da Mesa</span>
                                 <span className="text-3xl font-extrabold text-brand-600">R$ {getTableTotal(selectedTable).toFixed(2)}</span>
                             </div>
                           </div>

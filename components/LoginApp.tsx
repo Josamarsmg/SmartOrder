@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import { MockService } from '../services/mockService';
 
 export const LoginApp: React.FC = () => {
@@ -6,29 +7,19 @@ export const LoginApp: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [connectionStatus, setConnectionStatus] = useState<'CHECKING' | 'OK' | 'ERROR'>('CHECKING');
-  const [configErrorType, setConfigErrorType] = useState<string | null>(null);
 
-  const isDemoMode = !MockService.isConfigured;
-
-  useEffect(() => {
-    // Perform a connection check on mount
-    const check = async () => {
-        const result = await MockService.checkConnection();
-        if (result.success) {
-            setConnectionStatus('OK');
-        } else {
-            setConnectionStatus('ERROR');
-            setConfigErrorType(result.errorType || 'UNKNOWN');
-        }
-    };
-    check();
-  }, []);
+  const isConfigured = MockService.isConfigured;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
+
+    if (!isConfigured) {
+      setError('ERRO: Configure as chaves do Supabase no arquivo mockService.ts');
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const user = await MockService.login(email, password);
@@ -38,16 +29,9 @@ export const LoginApp: React.FC = () => {
       } else {
         setError('Usuário ou senha inválidos.');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      // Check for specific Firestore activation error
-      const msg = err.message || '';
-      if (msg.includes('Cloud Firestore API has not been used') || msg.includes('disabled')) {
-         setConfigErrorType('API_NOT_ENABLED');
-         setConnectionStatus('ERROR');
-      } else {
-         setError('Erro de conexão com o servidor. Verifique sua internet.');
-      }
+      setError('Erro ao conectar. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -57,12 +41,12 @@ export const LoginApp: React.FC = () => {
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4 relative">
       
       {/* Configuration Status Indicator */}
-      <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 
-        ${connectionStatus === 'ERROR' ? 'bg-red-500/20 text-red-500 border border-red-500/50' : 
-          (isDemoMode ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/50' : 'bg-green-500/20 text-green-500 border border-green-500/50')}`}>
-        <span className={`w-2 h-2 rounded-full 
-            ${connectionStatus === 'ERROR' ? 'bg-red-500' : (isDemoMode ? 'bg-yellow-500' : 'bg-green-500')}`}></span>
-        {connectionStatus === 'ERROR' ? 'Erro de Configuração' : (isDemoMode ? 'MODO DEMO' : 'ONLINE (Firebase)')}
+      <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 border shadow-lg backdrop-blur-sm 
+        ${isConfigured 
+          ? 'bg-green-500/20 text-green-500 border-green-500/50' 
+          : 'bg-red-500/20 text-red-500 border-red-500/50'}`}>
+        <span className={`w-2 h-2 rounded-full animate-pulse ${isConfigured ? 'bg-green-500' : 'bg-red-500'}`}></span>
+        {isConfigured ? 'SUPABASE CONECTADO' : 'SUPABASE DESCONECTADO'}
       </div>
 
       <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
@@ -73,41 +57,20 @@ export const LoginApp: React.FC = () => {
           <p className="text-brand-100 opacity-90">Gestão Inteligente para seu Restaurante</p>
         </div>
 
-        {/* CRITICAL CONFIG ERROR ALERT */}
-        {connectionStatus === 'ERROR' && configErrorType === 'API_NOT_ENABLED' && (
-            <div className="bg-red-50 p-6 border-b border-red-100">
-                <h3 className="text-red-800 font-bold text-lg mb-2 flex items-center gap-2">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                    Ação Necessária no Firebase
-                </h3>
-                <p className="text-sm text-red-700 mb-4">
-                    O projeto foi criado, mas o <strong>Banco de Dados (Firestore)</strong> ainda não foi ativado no painel do Google.
-                </p>
-                <div className="bg-white p-4 rounded border border-red-200 text-sm">
-                    <ol className="list-decimal pl-4 space-y-2 text-gray-800">
-                        <li>Acesse o <a href="https://console.firebase.google.com/" target="_blank" className="text-blue-600 underline font-bold">Console do Firebase</a>.</li>
-                        <li>Selecione o projeto <strong>smartorder-8de4e</strong>.</li>
-                        <li>No menu lateral, clique em <strong>Criação (Build)</strong> e depois em <strong>Firestore Database</strong>.</li>
-                        <li>Clique no botão <strong>Criar banco de dados</strong>.</li>
-                        <li>Escolha o local e selecione <strong>Iniciar no modo de teste</strong>.</li>
-                    </ol>
-                </div>
-                <button 
-                   onClick={() => window.location.reload()}
-                   className="w-full mt-4 bg-red-600 text-white py-2 rounded font-bold hover:bg-red-700"
-                >
-                    Já ativei, tentar novamente
-                </button>
-            </div>
-        )}
-
-        {/* Login Form (Only show if no critical config error) */}
-        {!(connectionStatus === 'ERROR' && configErrorType === 'API_NOT_ENABLED') && (
+        {/* Login Form */}
         <div className="p-8">
+          {!isConfigured && (
+             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                <strong>Configuração Necessária:</strong><br/>
+                Abra o arquivo <code>services/mockService.ts</code> e adicione sua <code>SUPABASE_URL</code> e <code>SUPABASE_ANON_KEY</code>.
+             </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-6">
             
             {error && (
-              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-medium border border-red-200">
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-medium border border-red-200 flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 {error}
               </div>
             )}
@@ -148,7 +111,7 @@ export const LoginApp: React.FC = () => {
 
             <button 
               type="submit" 
-              disabled={isLoading}
+              disabled={isLoading || !isConfigured}
               className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-brand-600 hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
@@ -161,15 +124,6 @@ export const LoginApp: React.FC = () => {
               )}
             </button>
           </form>
-        </div>
-        )}
-        
-        <div className="bg-gray-50 px-8 py-4 border-t border-gray-100 text-center">
-          <p className="text-xs text-gray-500">
-             {connectionStatus === 'OK' 
-               ? "Sistema conectado e sincronizado com a nuvem." 
-               : "Verificando conexão..."}
-          </p>
         </div>
       </div>
     </div>

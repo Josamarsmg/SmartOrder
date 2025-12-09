@@ -1,221 +1,265 @@
+
 import { Order, OrderStatus, CartItem, MenuItem, User } from '../types';
-import { MENU_ITEMS } from '../constants';
+// Import removido para evitar erro de módulo. Usaremos window.supabase injetado pelo index.html
 
 // ============================================================================
-// MOCK SERVICE (LOCAL STORAGE)
-// Substituindo Firebase por LocalStorage para corrigir erros de módulo e permitir execução offline.
+// CONFIGURAÇÃO DO SUPABASE
 // ============================================================================
+// 1. Crie um projeto em https://supabase.com
+// 2. Vá em Project Settings > API
+// 3. Copie a URL e a "anon" public key e cole abaixo:
 
-const STORAGE_KEYS = {
-  USERS: 'smartorder_users',
-  MENU: 'smartorder_menu',
-  ORDERS: 'smartorder_orders'
-};
+const SUPABASE_URL = 'https://xjywnmemsvezuipxdttq.supabase.co'; 
+const SUPABASE_ANON_KEY = 'sb_publishable_lIo8odfcYS6qAukWRkI1FA_Vr3dr_oN';
 
-// Types for listeners
-type OrderListener = (orders: Order[]) => void;
-const orderListeners: OrderListener[] = [];
+// Inicializa o cliente apenas se as chaves estiverem preenchidas
+const isConfigured = SUPABASE_URL.includes('https') && !SUPABASE_URL.includes('SUA_URL');
 
-// Helper to simulate delay for realism
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Acessa a biblioteca global injetada pela tag <script> no index.html
+const supabaseClient = (window as any).supabase;
 
-// Helper to get data from storage
-const getFromStorage = <T>(key: string, defaultVal: T): T => {
-  const stored = localStorage.getItem(key);
-  if (!stored) return defaultVal;
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return defaultVal;
-  }
-};
-
-// Helper to save to storage
-const saveToStorage = (key: string, data: any) => {
-  localStorage.setItem(key, JSON.stringify(data));
-};
+const supabase = (isConfigured && supabaseClient)
+  ? supabaseClient.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
+  : null;
 
 // ============================================================================
-// SEED AUTOMÁTICO (Preencher LocalStorage vazio)
+// SERVIÇO DE DADOS (SUPABASE)
 // ============================================================================
-const seedDatabaseIfNeeded = () => {
-  // Users
-  const users = getFromStorage<User[]>(STORAGE_KEYS.USERS, []);
-  if (users.length === 0) {
-    console.log("🌱 [Mock] Banco de dados vazio detectado. Criando usuário admin padrão...");
-    const admin: User = {
-      id: 'admin-user',
-      name: 'Administrador',
-      email: 'smartorder',
-      password: '1234',
-      role: 'Admin',
-      status: 'Ativo'
-    };
-    saveToStorage(STORAGE_KEYS.USERS, [admin]);
-  }
-
-  // Menu
-  const menu = getFromStorage<MenuItem[]>(STORAGE_KEYS.MENU, []);
-  if (menu.length === 0) {
-     console.log("🌱 [Mock] Criando cardápio padrão...");
-     saveToStorage(STORAGE_KEYS.MENU, MENU_ITEMS);
-  }
-
-  // Orders
-  if (!localStorage.getItem(STORAGE_KEYS.ORDERS)) {
-      saveToStorage(STORAGE_KEYS.ORDERS, []);
-  }
-};
-
-// Executa a verificação ao carregar
-seedDatabaseIfNeeded();
-
-// Broadcast updates to listeners (simulates real-time)
-const notifyOrderListeners = () => {
-  const orders = getFromStorage<Order[]>(STORAGE_KEYS.ORDERS, []);
-  orderListeners.forEach(listener => listener(orders));
-};
-
-// Listen for storage events (support for multiple tabs)
-window.addEventListener('storage', (e) => {
-  if (e.key === STORAGE_KEYS.ORDERS) {
-    notifyOrderListeners();
-  }
-});
 
 export const MockService = {
-  // isConfigured: false indica "Modo Demo" no LoginApp
-  isConfigured: false,
-
-  // --- Diagnostic Method ---
-  checkConnection: async (): Promise<{success: boolean, errorType?: 'API_NOT_ENABLED' | 'PERMISSION_DENIED' | 'UNKNOWN'}> => {
-    await delay(300);
-    return { success: true };
-  },
+  isConfigured: isConfigured && !!supabase,
 
   // --- Auth Methods ---
   login: async (email: string, password: string): Promise<User | null> => {
-    await delay(600);
-    const users = getFromStorage<User[]>(STORAGE_KEYS.USERS, []);
-    const user = users.find(u => u.email === email && u.password === password && u.status === 'Ativo');
-    return user || null;
+    // Fallback de segurança: Se o Supabase falhar ou não estiver configurado, permite entrar como Admin
+    // Isso garante que você não fique trancado fora do app enquanto configura o banco
+    if (!supabase || !isConfigured) {
+       console.warn("Modo Offline/Fallback ativado para login.");
+       if (email === 'admin' && password === '1234') {
+         return {
+           id: 'admin-fallback',
+           name: 'Administrador (Offline)',
+           email: 'admin',
+           role: 'Admin',
+           status: 'Ativo'
+         } as User;
+       }
+    }
+
+    if (!supabase) return null;
+    
+    // Consulta simples na tabela de usuários
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .eq('password', password) // Nota: Em produção real, use Supabase Auth
+      .single();
+
+    if (error || !data) return null;
+    return data as User;
   },
 
   // --- Menu Management Methods ---
   getMenu: async (): Promise<MenuItem[]> => {
-    await delay(300);
-    return getFromStorage<MenuItem[]>(STORAGE_KEYS.MENU, []);
+    if (!supabase) return [];
+    
+    const { data, error } = await supabase
+      .from('menu_items')
+      .select('*');
+      
+    if (error) {
+      console.error('Erro ao buscar menu:', error);
+      return [];
+    }
+    return data as MenuItem[];
   },
 
   addMenuItem: async (item: Omit<MenuItem, 'id'>): Promise<MenuItem> => {
-    await delay(300);
-    const menu = getFromStorage<MenuItem[]>(STORAGE_KEYS.MENU, []);
-    const newItem: MenuItem = { ...item, id: Math.random().toString(36).substr(2, 9) };
-    menu.push(newItem);
-    saveToStorage(STORAGE_KEYS.MENU, menu);
-    return newItem;
+    if (!supabase) throw new Error("Supabase não configurado");
+
+    const { data, error } = await supabase
+      .from('menu_items')
+      .insert([item])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as MenuItem;
   },
 
   updateMenuItem: async (item: MenuItem): Promise<void> => {
-    await delay(300);
-    const menu = getFromStorage<MenuItem[]>(STORAGE_KEYS.MENU, []);
-    const index = menu.findIndex(i => i.id === item.id);
-    if (index !== -1) {
-      menu[index] = item;
-      saveToStorage(STORAGE_KEYS.MENU, menu);
-    }
+    if (!supabase) return;
+    
+    const { error } = await supabase
+      .from('menu_items')
+      .update(item)
+      .eq('id', item.id);
+      
+    if (error) console.error('Erro ao atualizar item:', error);
   },
 
   deleteMenuItem: async (id: string): Promise<void> => {
-    await delay(300);
-    let menu = getFromStorage<MenuItem[]>(STORAGE_KEYS.MENU, []);
-    menu = menu.filter(i => i.id !== id);
-    saveToStorage(STORAGE_KEYS.MENU, menu);
+    if (!supabase) return;
+
+    const { error } = await supabase
+      .from('menu_items')
+      .delete()
+      .eq('id', id);
+
+    if (error) console.error('Erro ao deletar item:', error);
   },
 
   // --- Order Management Methods ---
   createOrder: async (tableId: string, items: CartItem[], customerName: string): Promise<string> => {
-    await delay(400);
-    const orders = getFromStorage<Order[]>(STORAGE_KEYS.ORDERS, []);
+    if (!supabase) throw new Error("Supabase não configurado");
+
     const total = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     
-    const newOrder: Order = {
-      id: Math.random().toString(36).substr(2, 6).toUpperCase(),
-      tableId,
-      customerName,
-      items,
-      total,
+    // O ID é gerado automaticamente pelo banco se configurado como UUID, 
+    // mas aqui vamos deixar o banco gerar ou passar se necessário.
+    // Vamos salvar 'items' como JSONB.
+    
+    const newOrderPayload = {
+      table_id: tableId, // Mapeando para snake_case do banco
+      customer_name: customerName,
+      items: items, // Supabase converte automaticamente para JSON
+      total: total,
       status: OrderStatus.PENDING,
       timestamp: Date.now()
     };
-    
-    orders.push(newOrder);
-    saveToStorage(STORAGE_KEYS.ORDERS, orders);
-    notifyOrderListeners();
-    return newOrder.id;
+
+    const { data, error } = await supabase
+      .from('orders')
+      .insert([newOrderPayload])
+      .select()
+      .single();
+
+    if (error) {
+      console.error(error);
+      throw error;
+    }
+    return data.id;
   },
 
   subscribeToOrders: (callback: (orders: Order[]) => void) => {
-    // Return current state immediately
-    const orders = getFromStorage<Order[]>(STORAGE_KEYS.ORDERS, []);
-    callback(orders);
-    
-    // Subscribe
-    orderListeners.push(callback);
-    
-    // Unsubscribe function
+    if (!supabase) return () => {};
+
+    // Cache local para evitar refetching constante
+    let currentOrders: Order[] = [];
+
+    // Helper para converter snake_case (banco) para camelCase (app)
+    const mapOrder = (o: any): Order => ({
+      id: o.id,
+      tableId: o.table_id,
+      customerName: o.customer_name,
+      // FIX: Garante que items seja sempre um array, mesmo se vier null/undefined do banco
+      items: (o.items && Array.isArray(o.items)) ? o.items : [],
+      total: o.total || 0,
+      status: o.status,
+      timestamp: o.timestamp
+    });
+
+    // 1. Busca inicial completa
+    const fetchInitial = async () => {
+      const { data } = await supabase
+        .from('orders')
+        .select('*')
+        .order('timestamp', { ascending: false }); // Ordenar pelo mais recente
+      
+      if (data) {
+        currentOrders = data.map(mapOrder);
+        callback([...currentOrders]);
+      }
+    };
+
+    fetchInitial();
+
+    // 2. Inscrever no Realtime com lógica de Delta Updates (MUITO MAIS RÁPIDO)
+    const channel = supabase
+      .channel('realtime:orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload: any) => {
+        
+        if (payload.eventType === 'INSERT') {
+          // Adiciona o novo pedido diretamente à lista local sem ir ao servidor
+          const newOrder = mapOrder(payload.new);
+          currentOrders = [newOrder, ...currentOrders];
+          callback([...currentOrders]);
+        
+        } else if (payload.eventType === 'UPDATE') {
+          // Atualiza apenas o pedido modificado na lista local
+          const updatedOrder = mapOrder(payload.new);
+          currentOrders = currentOrders.map(o => o.id === updatedOrder.id ? updatedOrder : o);
+          callback([...currentOrders]);
+        
+        } else if (payload.eventType === 'DELETE') {
+          // Remove o pedido deletado
+          currentOrders = currentOrders.filter(o => o.id !== payload.old.id);
+          callback([...currentOrders]);
+        }
+      })
+      .subscribe();
+
     return () => {
-      const idx = orderListeners.indexOf(callback);
-      if (idx !== -1) orderListeners.splice(idx, 1);
+      supabase.removeChannel(channel);
     };
   },
 
   updateOrderStatus: async (orderId: string, status: OrderStatus) => {
-    await delay(200);
-    const orders = getFromStorage<Order[]>(STORAGE_KEYS.ORDERS, []);
-    const order = orders.find(o => o.id === orderId);
-    if (order) {
-      order.status = status;
-      saveToStorage(STORAGE_KEYS.ORDERS, orders);
-      notifyOrderListeners();
-    }
+    if (!supabase) return;
+
+    await supabase
+      .from('orders')
+      .update({ status: status })
+      .eq('id', orderId);
   },
 
   // --- User Management Methods ---
   getUsers: async (): Promise<User[]> => {
-    await delay(300);
-    return getFromStorage<User[]>(STORAGE_KEYS.USERS, []);
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('*');
+
+    if (error) return [];
+    return data as User[];
   },
 
   addUser: async (user: Omit<User, 'id'>): Promise<User> => {
-    await delay(300);
-    const users = getFromStorage<User[]>(STORAGE_KEYS.USERS, []);
-    const newUser: User = { ...user, id: Math.random().toString(36).substr(2, 9) };
-    users.push(newUser);
-    saveToStorage(STORAGE_KEYS.USERS, users);
-    return newUser;
+    if (!supabase) throw new Error("Supabase não configurado");
+
+    const { data, error } = await supabase
+      .from('users')
+      .insert([user])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as User;
   },
 
   updateUser: async (user: User): Promise<void> => {
-    await delay(300);
-    const users = getFromStorage<User[]>(STORAGE_KEYS.USERS, []);
-    const index = users.findIndex(u => u.id === user.id);
-    if (index !== -1) {
-      // Keep password if not provided
-      const existing = users[index];
-      const updated = { ...user };
-      if (!updated.password) {
-        updated.password = existing.password;
-      }
-      users[index] = updated;
-      saveToStorage(STORAGE_KEYS.USERS, users);
-    }
+    if (!supabase) return;
+
+    const { error } = await supabase
+      .from('users')
+      .update(user)
+      .eq('id', user.id);
+
+    if (error) console.error(error);
   },
 
   deleteUser: async (id: string): Promise<void> => {
-    await delay(300);
-    let users = getFromStorage<User[]>(STORAGE_KEYS.USERS, []);
-    users = users.filter(u => u.id !== id);
-    saveToStorage(STORAGE_KEYS.USERS, users);
+    if (!supabase) return;
+    
+    // Prevenção simples de deletar o admin se o email for 'smartorder'
+    const { data } = await supabase.from('users').select('email').eq('id', id).single();
+    if (data?.email === 'smartorder') {
+        alert("Não é possível deletar o usuário admin padrão via App.");
+        return;
+    }
+
+    await supabase.from('users').delete().eq('id', id);
   },
 };

@@ -7,14 +7,9 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-try {
-  const root = ReactDOM.createRoot(rootElement);
-  root.render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
-} catch (error) {
-  console.error("Failed to mount React application:", error);
-  rootElement.innerHTML = '<div style="color: red; padding: 20px;">Erro crítico ao carregar a aplicação. Verifique o console.</div>';
-}
+const root = ReactDOM.createRoot(rootElement);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
