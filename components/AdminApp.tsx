@@ -326,7 +326,7 @@ export const AdminApp: React.FC = () => {
       <aside className="w-64 bg-gray-900 text-white flex flex-col no-print shrink-0 h-screen sticky top-0">
         <div className="p-6 border-b border-gray-800">
           <h1 className="text-2xl font-bold text-brand-500">SmartOrder</h1>
-          <p className="text-xs text-gray-500">Admin Panel v1.0</p>
+          <p className="text-xs text-gray-500">Admin Panel v1.2 (Live)</p>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-2">
