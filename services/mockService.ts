@@ -145,10 +145,10 @@ export const MockService = {
   subscribeToOrders: (callback: (orders: Order[]) => void) => {
     if (!supabase) return () => {};
 
-    // Cache local para evitar refetching constante
+    // Cache local para manter estado
     let currentOrders: Order[] = [];
 
-    // Helper para converter snake_case (banco) para camelCase (app)
+    // Helper para converter snake_case (banco) para camelCase (app) e tratar nulos
     const mapOrder = (o: any): Order => ({
       id: o.id,
       tableId: o.table_id,
@@ -160,45 +160,54 @@ export const MockService = {
       timestamp: o.timestamp
     });
 
-    // 1. Busca inicial completa
+    // Função para atualizar o estado e chamar o callback
+    const updateState = (newOrders: Order[]) => {
+        currentOrders = newOrders;
+        callback([...currentOrders]);
+    };
+
+    // 1. Configurar Realtime ANTES do fetch inicial para não perder eventos
+    const channel = supabase
+      .channel('public:orders_tracker')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload: any) => {
+        console.log('⚡ Realtime Update:', payload.eventType);
+        
+        if (payload.eventType === 'INSERT') {
+          const newOrder = mapOrder(payload.new);
+          // Previne duplicidade caso o fetch inicial já tenha trazido este pedido
+          if (!currentOrders.find(o => o.id === newOrder.id)) {
+             updateState([newOrder, ...currentOrders]);
+          }
+        
+        } else if (payload.eventType === 'UPDATE') {
+          const updatedOrder = mapOrder(payload.new);
+          updateState(currentOrders.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+        
+        } else if (payload.eventType === 'DELETE') {
+          updateState(currentOrders.filter(o => o.id !== payload.old.id));
+        }
+      })
+      .subscribe((status: string) => {
+          if (status === 'SUBSCRIBED') {
+              console.log('✅ Conectado ao Supabase Realtime');
+          }
+      });
+
+    // 2. Busca inicial completa
     const fetchInitial = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('orders')
         .select('*')
         .order('timestamp', { ascending: false }); // Ordenar pelo mais recente
       
       if (data) {
-        currentOrders = data.map(mapOrder);
-        callback([...currentOrders]);
+        // Ao receber dados iniciais, sobrescrevemos o estado.
+        // O Realtime cuidará das atualizações futuras.
+        updateState(data.map(mapOrder));
       }
     };
 
     fetchInitial();
-
-    // 2. Inscrever no Realtime com lógica de Delta Updates (MUITO MAIS RÁPIDO)
-    const channel = supabase
-      .channel('realtime:orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload: any) => {
-        
-        if (payload.eventType === 'INSERT') {
-          // Adiciona o novo pedido diretamente à lista local sem ir ao servidor
-          const newOrder = mapOrder(payload.new);
-          currentOrders = [newOrder, ...currentOrders];
-          callback([...currentOrders]);
-        
-        } else if (payload.eventType === 'UPDATE') {
-          // Atualiza apenas o pedido modificado na lista local
-          const updatedOrder = mapOrder(payload.new);
-          currentOrders = currentOrders.map(o => o.id === updatedOrder.id ? updatedOrder : o);
-          callback([...currentOrders]);
-        
-        } else if (payload.eventType === 'DELETE') {
-          // Remove o pedido deletado
-          currentOrders = currentOrders.filter(o => o.id !== payload.old.id);
-          callback([...currentOrders]);
-        }
-      })
-      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
