@@ -68,6 +68,10 @@ export const AdminApp: React.FC = () => {
   // Closing Bill States
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [includeServiceFee, setIncludeServiceFee] = useState(true);
+  
+  // Payment States
+  const [paymentMethod, setPaymentMethod] = useState('Dinheiro');
+  const [amountPaid, setAmountPaid] = useState(0);
 
   // Company Settings (for print)
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
@@ -160,10 +164,26 @@ export const AdminApp: React.FC = () => {
     return grouped;
   };
 
+  // Navigation Helper
+  const navigateTo = (path: string) => {
+    window.location.hash = path;
+  };
+
+  // Calculations for render
+  const currentTableSubtotal = selectedTable ? getTableTotal(selectedTable) : 0;
+  const currentServiceFee = includeServiceFee ? currentTableSubtotal * 0.10 : 0;
+  const currentFinalTotal = currentTableSubtotal + currentServiceFee;
+  
+  // Payment Logic Calculations
+  const changeDue = Math.max(0, amountPaid - currentFinalTotal);
+
   const initiateCloseTable = () => {
     // Reload settings just in case
     setCompanySettings(MockService.getCompanySettings());
     setIncludeServiceFee(true);
+    setPaymentMethod('Dinheiro');
+    // Pre-fill amount paid with total for convenience
+    setAmountPaid(0); 
     setShowCloseModal(true);
   };
 
@@ -171,7 +191,7 @@ export const AdminApp: React.FC = () => {
     if (selectedTable) {
       // Simulate backend closing
       const tableOrders = orders.filter(o => o.tableId === selectedTable && o.status !== OrderStatus.CLOSED);
-      // In a real app, we would save the service fee information to the backend here
+      // In a real app, we would save the service fee information and payment method to the backend here
       tableOrders.forEach(o => MockService.updateOrderStatus(o.id, OrderStatus.CLOSED));
       
       setShowCloseModal(false);
@@ -273,16 +293,6 @@ export const AdminApp: React.FC = () => {
     window.open(`${cleanBase}/`, '_blank');
   };
 
-  // Navigation Helper
-  const navigateTo = (path: string) => {
-    window.location.hash = path;
-  };
-
-  // Calculations for render
-  const currentTableSubtotal = selectedTable ? getTableTotal(selectedTable) : 0;
-  const currentServiceFee = includeServiceFee ? currentTableSubtotal * 0.10 : 0;
-  const currentFinalTotal = currentTableSubtotal + currentServiceFee;
-
   // Prepare grouped orders for display in the panel
   const groupedOrdersForPanel = selectedTable ? getOrdersByPerson(selectedTable) : {};
   
@@ -364,14 +374,29 @@ export const AdminApp: React.FC = () => {
             <span>VALOR A PAGAR R$</span>
             <span>{currentFinalTotal.toFixed(2)}</span>
           </div>
+          
           <div className="flex justify-between mt-1">
             <span>FORMA PAGAMENTO</span>
             <span>VALOR PAGO</span>
           </div>
           <div className="flex justify-between">
-            <span>Dinheiro / Cartão</span>
-            <span>{currentFinalTotal.toFixed(2)}</span>
+            <span>{paymentMethod}</span>
+            <span>
+                {paymentMethod === 'Dinheiro' 
+                  ? (amountPaid || currentFinalTotal).toFixed(2) // Se for dinheiro, mostra o digitado
+                  : currentFinalTotal.toFixed(2) // Se for cartão/pix, o valor pago é o total
+                }
+            </span>
           </div>
+          
+          {/* Change Display (Only for Cash) */}
+          {paymentMethod === 'Dinheiro' && changeDue > 0 && (
+             <div className="flex justify-between font-bold mt-1">
+                <span>TROCO</span>
+                <span>{changeDue.toFixed(2)}</span>
+             </div>
+          )}
+
           <div className="border-b border-dashed border-black my-1"></div>
 
           {/* 4. Fiscal Info & Footer */}
@@ -1058,14 +1083,14 @@ export const AdminApp: React.FC = () => {
       {/* Close Bill Modal */}
       {showCloseModal && selectedTable && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in no-print">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-                <div className="bg-gray-900 px-6 py-4 flex justify-between items-center">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="bg-gray-900 px-6 py-4 flex justify-between items-center shrink-0">
                     <h3 className="text-xl font-bold text-white">Encerrar Mesa {selectedTable}</h3>
                     <button onClick={() => setShowCloseModal(false)} className="text-gray-400 hover:text-white">✕</button>
                 </div>
                 
-                <div className="p-6">
-                    <div className="space-y-4 mb-8">
+                <div className="p-6 overflow-y-auto">
+                    <div className="space-y-4 mb-6">
                         <div className="flex justify-between items-center text-gray-600">
                             <span>Subtotal Pedidos</span>
                             <span className="font-bold">R$ {currentTableSubtotal.toFixed(2)}</span>
@@ -1094,6 +1119,44 @@ export const AdminApp: React.FC = () => {
                             <span>TOTAL FINAL</span>
                             <span>R$ {currentFinalTotal.toFixed(2)}</span>
                         </div>
+                    </div>
+
+                    {/* Payment Method Section */}
+                    <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Forma de Pagamento</label>
+                        <select 
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value)}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:border-blue-500"
+                        >
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Cartão de Crédito">Cartão de Crédito</option>
+                            <option value="Cartão de Débito">Cartão de Débito</option>
+                            <option value="PIX">PIX</option>
+                        </select>
+
+                        {/* Cash specific input */}
+                        {paymentMethod === 'Dinheiro' && (
+                            <div className="flex gap-4 items-end">
+                                <div className="flex-1">
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">Valor Pago (R$)</label>
+                                    <input 
+                                        type="number"
+                                        step="0.01"
+                                        value={amountPaid === 0 ? '' : amountPaid}
+                                        onChange={(e) => setAmountPaid(parseFloat(e.target.value) || 0)}
+                                        placeholder={currentFinalTotal.toFixed(2)}
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:outline-none text-lg font-bold text-gray-800"
+                                    />
+                                </div>
+                                <div className="flex-1 text-right">
+                                    <span className="block text-xs font-medium text-gray-500 mb-1">Troco</span>
+                                    <span className={`text-xl font-bold ${changeDue < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                        R$ {changeDue.toFixed(2)}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
