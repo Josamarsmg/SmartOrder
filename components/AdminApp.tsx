@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Order, OrderStatus, User } from '../types';
+import { Order, OrderStatus, User, CompanySettings } from '../types';
 import { MockService } from '../services/mockService';
 import { TABLES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area } from 'recharts';
@@ -9,10 +9,10 @@ import { MenuEditorApp } from './MenuEditorApp';
 import { HistoryApp } from './HistoryApp';
 import { UserManagementApp } from './UserManagementApp';
 import { CustomerApp } from './CustomerApp';
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import { CompanySettingsApp } from './CompanySettingsApp';
+// Imports de jspdf removidos pois estamos usando via script global
 
-type AdminTab = 'DASHBOARD' | 'TABLES' | 'QRCODES' | 'KITCHEN' | 'MENU' | 'HISTORY' | 'USERS';
+type AdminTab = 'DASHBOARD' | 'TABLES' | 'QRCODES' | 'KITCHEN' | 'MENU' | 'HISTORY' | 'USERS' | 'COMPANY';
 
 export const AdminApp: React.FC = () => {
   // --- Auth & Permission Logic ---
@@ -36,7 +36,7 @@ export const AdminApp: React.FC = () => {
         return ['TABLES', 'KITCHEN'];
       case 'Admin':
       default:
-        return ['DASHBOARD', 'TABLES', 'QRCODES', 'KITCHEN', 'MENU', 'HISTORY', 'USERS'];
+        return ['DASHBOARD', 'TABLES', 'QRCODES', 'KITCHEN', 'MENU', 'HISTORY', 'USERS', 'COMPANY'];
     }
   };
 
@@ -69,6 +69,9 @@ export const AdminApp: React.FC = () => {
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [includeServiceFee, setIncludeServiceFee] = useState(true);
 
+  // Company Settings (for print)
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+
   // Colors for the chart to match the reference image
   // Orange/Red, Teal, Dark Blue, Yellow/Gold
   const CHART_COLORS = ['#E76F51', '#2A9D8F', '#264653', '#E9C46A', '#F4A261'];
@@ -77,6 +80,8 @@ export const AdminApp: React.FC = () => {
     const unsubscribe = MockService.subscribeToOrders((allOrders) => {
       setOrders(allOrders);
     });
+    // Load company settings
+    setCompanySettings(MockService.getCompanySettings());
     return () => unsubscribe();
   }, []);
 
@@ -156,6 +161,8 @@ export const AdminApp: React.FC = () => {
   };
 
   const initiateCloseTable = () => {
+    // Reload settings just in case
+    setCompanySettings(MockService.getCompanySettings());
     setIncludeServiceFee(true);
     setShowCloseModal(true);
   };
@@ -174,13 +181,16 @@ export const AdminApp: React.FC = () => {
 
   const handlePrint = () => {
     window.print();
-    finalizeCloseTable();
+    // finalizeCloseTable(); // Optional: Close automatically after print
   };
 
   const handleDownloadPDF = () => {
     if (!selectedTable) return;
 
+    // Use Global jsPDF instance loaded via script tag
+    const jsPDF = (window as any).jspdf.jsPDF;
     const doc = new jsPDF();
+    
     const subtotal = getTableTotal(selectedTable);
     const serviceFee = includeServiceFee ? subtotal * 0.10 : 0;
     const finalTotal = subtotal + serviceFee;
@@ -205,7 +215,8 @@ export const AdminApp: React.FC = () => {
 
         const customerSubtotal = customerOrders.reduce((acc, o) => acc + o.total, 0);
 
-        autoTable(doc, {
+        // Call autoTable via doc instance
+        (doc as any).autoTable({
             startY: finalY,
             head: [[`Cliente: ${customerName}`, 'Valor']],
             body: bodyData,
@@ -223,7 +234,7 @@ export const AdminApp: React.FC = () => {
     });
 
     // Final Totals Table
-    autoTable(doc, {
+    (doc as any).autoTable({
         startY: finalY + 5,
         body: [
             ['Subtotal Pedidos', `R$ ${subtotal.toFixed(2)}`],
@@ -236,7 +247,7 @@ export const AdminApp: React.FC = () => {
     });
 
     doc.save(`recibo_mesa_${selectedTable}_${new Date().getTime()}.pdf`);
-    finalizeCloseTable();
+    // finalizeCloseTable();
   };
 
   const generateQrUrl = (tableId: string) => {
@@ -246,6 +257,12 @@ export const AdminApp: React.FC = () => {
     // Using a reliable public API for QR code generation
     return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(appUrl)}`;
   };
+
+  const generateAccessKeyQrUrl = (accessKey: string) => {
+      // Simulate NFC-e URL
+      const sefazUrl = `http://www.nfce.fazenda.sp.gov.br/consulta?p=${accessKey}|2|1|1|AABBCC`;
+      return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(sefazUrl)}`;
+  }
 
   const handlePrintQrs = () => {
     window.print();
@@ -268,85 +285,128 @@ export const AdminApp: React.FC = () => {
 
   // Prepare grouped orders for display in the panel
   const groupedOrdersForPanel = selectedTable ? getOrdersByPerson(selectedTable) : {};
+  
+  // Flatten orders for fiscal print
+  const allFiscalItems = selectedTable 
+    ? orders
+        .filter(o => o.tableId === selectedTable && o.status !== OrderStatus.CLOSED)
+        .flatMap(o => (o.items || []))
+    : [];
+
+  // Random Access Key Generation for Mock
+  const mockAccessKey = "3515 08" + Math.random().toString().slice(2, 16) + Math.random().toString().slice(2, 16) + " 55 001 000000001 1 00000000";
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900 font-sans flex">
-      {/* Print Only Section for Bill (Only rendered if Table is selected) */}
+      {/* ================================================================================= */}
+      {/* DANFE NFC-e PRINT LAYOUT (Modelo 65)                                              */}
+      {/* ================================================================================= */}
       {selectedTable && (
-        <div className="print-only p-8 bg-white max-w-2xl mx-auto">
-          <h1 className="text-2xl font-bold text-center mb-1">Restaurante SmartOrder</h1>
-          <p className="text-center text-sm text-gray-500 mb-6">Nota de Conferência</p>
+        <div className="print-only" style={{ width: '80mm', margin: '0 auto', fontSize: '10px', fontFamily: 'monospace' }}>
           
-          <div className="flex justify-between border-b pb-2 mb-4 text-sm">
-            <div>
-               <p className="font-bold">Mesa: {selectedTable}</p>
-            </div>
-            <div>
-               <p>{new Date().toLocaleDateString()}</p>
-               <p>{new Date().toLocaleTimeString()}</p>
-            </div>
+          {/* 1. Header (Empresa) */}
+          <div className="text-center mb-2">
+            <h2 className="font-bold text-xs uppercase">{companySettings?.nomeFantasia || 'NOME FANTASIA'}</h2>
+            <p className="uppercase">{companySettings?.razaoSocial || 'RAZAO SOCIAL DA EMPRESA LTDA'}</p>
+            <p>CNPJ: {companySettings?.cnpj || '00.000.000/0000-00'}   IE: {companySettings?.ie || 'ISENTO'}</p>
+            <p className="uppercase">
+              {companySettings?.logradouro || 'ENDERECO'}, {companySettings?.numero || '000'}, {companySettings?.bairro || 'BAIRRO'}, {companySettings?.municipio || 'CIDADE'}, {companySettings?.uf || 'UF'}
+            </p>
+            <div className="border-b border-dashed border-black my-1"></div>
+            <p className="font-bold text-xs">DANFE NFC-e - Documento Auxiliar da Nota Fiscal de Consumidor Eletrônica</p>
+            <p>Não permite aproveitamento de crédito de ICMS</p>
+            <div className="border-b border-dashed border-black my-1"></div>
           </div>
 
-          {Object.entries(getOrdersByPerson(selectedTable)).map(([customerName, customerOrders]) => {
-            const customerTotal = customerOrders.reduce((acc, o) => acc + o.total, 0);
-            
-            return (
-              <div key={customerName} className="mb-6">
-                <div className="bg-gray-100 p-1 mb-2">
-                  <span className="font-bold text-sm uppercase">Cliente: {customerName}</span>
-                </div>
-                <table className="w-full text-left text-sm mb-2">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="w-12">Qtd</th>
-                      <th>Item</th>
-                      <th className="text-right">Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customerOrders.flatMap(o => (o.items || [])).map((item, i) => (
-                      <tr key={i} className="border-b border-gray-50">
-                        <td className="py-1">{item.quantity}</td>
-                        <td className="py-1">
-                          {item.name}
-                          <span className="text-xs text-gray-500 ml-1">(R$ {item.price.toFixed(2)})</span>
-                        </td>
-                        <td className="py-1 text-right">R$ {(item.price * item.quantity).toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="flex justify-end text-sm font-semibold">
-                   <span>Subtotal {customerName}: R$ {customerTotal.toFixed(2)}</span>
-                </div>
-              </div>
-            );
-          })}
+          {/* 2. Items Table */}
+          <table className="w-full text-left mb-2">
+            <thead>
+              <tr className="uppercase text-[9px]">
+                <th>Cod</th>
+                <th>Desc</th>
+                <th className="text-right">Qtd</th>
+                <th className="text-right">Un</th>
+                <th className="text-right">Vl Un</th>
+                <th className="text-right">Vl Tot</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allFiscalItems.map((item, i) => (
+                <tr key={i} className="align-top">
+                  <td>{String(i + 1).padStart(3, '0')}</td>
+                  <td className="uppercase pr-1">{item.name.substring(0, 20)}</td>
+                  <td className="text-right">{item.quantity}</td>
+                  <td className="text-right">UN</td>
+                  <td className="text-right">{item.price.toFixed(2)}</td>
+                  <td className="text-right">{(item.price * item.quantity).toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="border-b border-dashed border-black my-1"></div>
 
-          <div className="border-t-2 border-black pt-4 mt-6">
-             <div className="flex justify-between text-sm mb-1">
-                <span>Subtotal Pedidos</span>
-                <span>R$ {currentTableSubtotal.toFixed(2)}</span>
+          {/* 3. Totals */}
+          <div className="flex justify-between font-bold">
+            <span>QTD. TOTAL DE ITENS</span>
+            <span>{allFiscalItems.reduce((acc, i) => acc + i.quantity, 0)}</span>
+          </div>
+          <div className="flex justify-between font-bold text-xs mt-1">
+            <span>VALOR TOTAL R$</span>
+            <span>{currentTableSubtotal.toFixed(2)}</span>
+          </div>
+          {includeServiceFee && (
+            <div className="flex justify-between text-[9px] mt-1">
+              <span>ACRÉSCIMO (Taxa Serviço)</span>
+              <span>{currentServiceFee.toFixed(2)}</span>
+            </div>
+          )}
+           <div className="flex justify-between font-bold text-xs mt-1">
+            <span>VALOR A PAGAR R$</span>
+            <span>{currentFinalTotal.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between mt-1">
+            <span>FORMA PAGAMENTO</span>
+            <span>VALOR PAGO</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Dinheiro / Cartão</span>
+            <span>{currentFinalTotal.toFixed(2)}</span>
+          </div>
+          <div className="border-b border-dashed border-black my-1"></div>
+
+          {/* 4. Fiscal Info & Footer */}
+          <div className="text-center text-[9px]">
+             <p>Informação dos Tributos Totais Incidentes (Lei Federal 12.741/2012): R$ {(currentFinalTotal * 0.12).toFixed(2)}</p>
+             <div className="border-b border-dashed border-black my-1"></div>
+             
+             <p className="font-bold">Mesa {selectedTable}</p>
+             <p>Emissão: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+             <p className="mt-2 font-bold">Número: 000000001 Série: 1</p>
+             <p className="mt-1">Consulte pela Chave de Acesso em</p>
+             <p>http://www.nfce.fazenda.sp.gov.br/consulta</p>
+             
+             <p className="font-bold mt-2">CHAVE DE ACESSO</p>
+             <p className="tracking-widest mb-2">{mockAccessKey}</p>
+             
+             <div className="flex justify-center my-2">
+                <img src={generateAccessKeyQrUrl(mockAccessKey)} alt="QR Code Fiscal" className="w-24 h-24" />
              </div>
-             {includeServiceFee && (
-                <div className="flex justify-between text-sm mb-1">
-                    <span>Taxa de Serviço (10%)</span>
-                    <span>R$ {currentServiceFee.toFixed(2)}</span>
-                </div>
-             )}
-            <div className="flex justify-between font-bold text-2xl mt-2">
-                <span>TOTAL GERAL</span>
-                <span>R$ {currentFinalTotal.toFixed(2)}</span>
-            </div>
+             
+             <p>CONSUMIDOR NÃO IDENTIFICADO</p>
+             <p className="mt-2 font-bold">Protocolo de Autorização</p>
+             <p>135{Math.floor(Math.random() * 1000000000)} {new Date().toLocaleString()}</p>
           </div>
-          <p className="text-center mt-12 text-xs text-gray-400">Obrigado pela preferência!</p>
         </div>
       )}
+      {/* ================================================================================= */}
+      {/* END DANFE LAYOUT                                                                  */}
+      {/* ================================================================================= */}
 
-      {/* Print Only Section for QR Codes */}
+
+      {/* Print Only Section for QR Codes (Mesa) */}
       {activeTab === 'QRCODES' && (
         <div className="print-only p-4 bg-white">
-          <h1 className="text-xl font-bold text-center mb-4">Códigos das Mesas - SmartOrder</h1>
+          <h1 className="text-xl font-bold text-center mb-4">Códigos das Mesas - {companySettings?.nomeFantasia}</h1>
           <div className="grid grid-cols-4 gap-4">
             {TABLES.map(table => (
               <div key={table.id} className="border border-gray-800 rounded p-2 flex flex-col items-center justify-center text-center">
@@ -364,7 +424,7 @@ export const AdminApp: React.FC = () => {
         <div className="p-6 border-b border-gray-800">
           <h1 className="text-2xl font-bold text-brand-500">SmartOrder</h1>
           <div className="flex flex-col mt-1">
-            <span className="text-xs text-gray-500">v1.2 (Live Tracking)</span>
+            <span className="text-xs text-gray-500">v1.3 (NFC-e Ready)</span>
             <span className="text-xs font-bold text-white mt-1 bg-gray-800 px-2 py-0.5 rounded w-fit">
               {currentUser?.name || 'Carregando...'}
             </span>
@@ -474,6 +534,20 @@ export const AdminApp: React.FC = () => {
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
               <span className="font-medium">Usuários</span>
+            </button>
+          )}
+
+          {allowedTabs.includes('COMPANY') && (
+            <button
+              onClick={() => { setActiveTab('COMPANY'); setSelectedTable(null); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                activeTab === 'COMPANY' 
+                  ? 'bg-brand-600 text-white shadow-lg' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+              <span className="font-medium">Empresa</span>
             </button>
           )}
         </nav>
@@ -971,6 +1045,12 @@ export const AdminApp: React.FC = () => {
                <UserManagementApp embedded={true} />
              </div>
           )}
+          
+          {allowedTabs.includes('COMPANY') && activeTab === 'COMPANY' && (
+             <div className="animate-fade-in">
+               <CompanySettingsApp embedded={true} />
+             </div>
+          )}
 
         </main>
       </div>
@@ -1029,7 +1109,7 @@ export const AdminApp: React.FC = () => {
                             className="flex items-center justify-center gap-2 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-colors"
                         >
                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-                            Imprimir
+                            Imprimir Fiscal
                         </button>
                         <button 
                             onClick={finalizeCloseTable}

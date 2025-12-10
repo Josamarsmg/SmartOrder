@@ -1,5 +1,5 @@
 
-import { Order, OrderStatus, CartItem, MenuItem, User } from '../types';
+import { Order, OrderStatus, CartItem, MenuItem, User, CompanySettings } from '../types';
 // Import removido para evitar erro de módulo. Usaremos window.supabase injetado pelo index.html
 
 // ============================================================================
@@ -271,4 +271,28 @@ export const MockService = {
 
     await supabase.from('users').delete().eq('id', id);
   },
+
+  // --- Company Settings Methods (Using LocalStorage for simplicity) ---
+  getCompanySettings: (): CompanySettings => {
+    const saved = localStorage.getItem('smartOrder_company');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    // Default Empty
+    return {
+      nomeFantasia: 'RESTAURANTE MODELO LTDA',
+      razaoSocial: 'RESTAURANTE MODELO COMERCIO DE ALIMENTOS LTDA',
+      cnpj: '00.000.000/0001-00',
+      ie: 'ISENTO',
+      logradouro: 'AVENIDA PRINCIPAL',
+      numero: '1000',
+      bairro: 'CENTRO',
+      municipio: 'SAO PAULO',
+      uf: 'SP'
+    };
+  },
+
+  saveCompanySettings: (settings: CompanySettings): void => {
+    localStorage.setItem('smartOrder_company', JSON.stringify(settings));
+  }
 };

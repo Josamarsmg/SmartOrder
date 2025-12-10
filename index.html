@@ -48,6 +48,10 @@
     </style>
     <!-- Carregando Supabase via UMD (Universal Module Definition) para evitar erros de importação ESM -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Carregando jsPDF e AutoTable via UMD para garantir que o plugin se registre corretamente -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     
     <script type="importmap">
     {
@@ -55,9 +59,7 @@
         "react-dom/": "https://aistudiocdn.com/react-dom@19.2.1/",
         "react/": "https://aistudiocdn.com/react@19.2.1/",
         "react": "https://aistudiocdn.com/react@19.2.1",
-        "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
-        "jspdf": "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm",
-        "jspdf-autotable": "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/+esm"
+        "recharts": "https://aistudiocdn.com/recharts@^3.5.1"
       }
     }
     </script>

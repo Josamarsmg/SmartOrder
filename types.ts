@@ -1,3 +1,4 @@
+
 export enum OrderStatus {
   PENDING = 'Enviado',
   PREPARING = 'Em preparo',
@@ -56,6 +57,19 @@ export interface User {
   password?: string; // Adicionado campo de senha (opcional na tipagem para segurança no front, mas usado no mock)
   role: UserRole;
   status: UserStatus;
+}
+
+// Company / Fiscal Settings
+export interface CompanySettings {
+  nomeFantasia: string;
+  razaoSocial: string;
+  cnpj: string;
+  ie: string;
+  logradouro: string;
+  numero: string;
+  bairro: string;
+  municipio: string;
+  uf: string;
 }
 
 // Helper types for UI

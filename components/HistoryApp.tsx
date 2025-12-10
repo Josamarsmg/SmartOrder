@@ -1,9 +1,9 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Order, OrderStatus } from '../types';
 import { MockService } from '../services/mockService';
 import { TABLES } from '../constants';
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+// Imports de jspdf removidos pois estamos usando via script global
 
 interface HistoryAppProps {
   embedded?: boolean;
@@ -47,6 +47,8 @@ export const HistoryApp: React.FC<HistoryAppProps> = ({ embedded = false }) => {
 
   // PDF Export
   const handleDownloadPDF = () => {
+    // Acessa o objeto global window.jspdf carregado via script tag
+    const jsPDF = (window as any).jspdf.jsPDF;
     const doc = new jsPDF();
 
     // Header
@@ -69,8 +71,8 @@ export const HistoryApp: React.FC<HistoryAppProps> = ({ embedded = false }) => {
       `R$ ${order.total.toFixed(2)}`
     ]);
 
-    // Generate Table
-    autoTable(doc, {
+    // Generate Table - usando doc.autoTable (método injetado pelo plugin)
+    (doc as any).autoTable({
       startY: 45,
       head: [['Data/Hora', 'Mesa', 'Cliente', 'Itens', 'Status', 'Valor']],
       body: tableData,
